@@ -1,0 +1,55 @@
+name: Build QMK Firmware
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: qmkfm/qmk_cli
+    strategy:
+      fail-fast: false
+      matrix:
+        keyboard:
+          - helios
+    steps:
+    - name: Disable git safe directory checks
+      run: git config --global --add safe.directory '*'
+
+    - name: Checkout QMK
+      uses: actions/checkout@v3
+      with:
+        repository: qmk/qmk_firmware
+        persist-credentials: false
+        submodules: recursive
+
+    - name: Checkout userspace
+      uses: actions/checkout@v3
+      with:
+        path: users/${{ github.actor }}
+        persist-credentials: false
+
+    - name: Add keyboards
+      run: |
+        for keyboard_folder in users/${{ github.actor }}/keyboards/*; do
+          ln -s $(realpath $keyboard_folder) keyboards/
+        done
+
+    - name: Build firmware
+      run: qmk compile "users/${{ github.actor }}/keymaps/${{ matrix.keyboard }}.json"
+
+    - name: Upload binaries
+      uses: actions/upload-artifact@v4
+      if: always() && !cancelled()
+      continue-on-error: true
+      with:
+        name: Firmware
+        path: |
+            *.bin
+            *.hex
+            *.uf2
